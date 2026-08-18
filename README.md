@@ -13,7 +13,7 @@
 ## 🌟 Key Features
 
 - 🎙️ **Multi-Engine Transcription**: Powered by a unified backend supporting `faster-whisper`, `Qwen3-ASR`.
-  - **Auto-Selection**: Automatically uses `Canary-Qwen` for English, and `Qwen3-ASR` with Forced Alignment for everything else.
+  - **Auto-Selection**: Automatically uses `Qwen3-ASR` with Forced Alignment for everything else.
   - Features Voice Activity Detection (VAD) and automatic language detection.
 - ⚡ **Hardware Acceleration**: Automatic GPU (`CUDA` / float16 / bfloat16) acceleration with seamless fallback to CPU (`int8`) for Whisper.
 - 🌐 **Multi-Provider AI Translation Chain**:
