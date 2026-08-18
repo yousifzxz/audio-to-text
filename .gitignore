@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Environment variables & API keys
+.env
+*.env
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Video files (avoid pushing huge media files)
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+
+# Subtitle outputs / temporary files
+*.srt
+*.ass
+scratch/
