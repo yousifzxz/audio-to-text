@@ -4,3 +4,8 @@ ctranslate2>=4.0.0
 deepl
 google-genai
 groq
+python-dotenv
+transformers>=5.13.0
+accelerate
+librosa
+soundfile

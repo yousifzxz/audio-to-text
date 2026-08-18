@@ -32,4 +32,10 @@ Thumbs.db
 # Subtitle outputs / temporary files
 *.srt
 *.ass
+
+# Autosub cache
+.autosub_cache/
+
+# Test artifacts
 scratch/
+.pytest_cache/

@@ -6,22 +6,30 @@
 [![MPV](https://img.shields.io/badge/Player-mpv-purple.svg)](https://mpv.io/)
 [![SDAIA Academy](https://img.shields.io/badge/Community-SDAIA%20Academy-008080.svg)](https://github.com/SDAIAAcademy)
 
-**Autosub Player** is an intelligent, high-performance video subtitle generator and player. It transcribes audio tracks locally using [faster-whisper](https://github.com/SYSTRAN/faster-whisper), optionally translates subtitles using a resilient multi-provider AI translation fallback chain (**DeepL**, **Google Gemini**, and **Groq**), exports standard subtitle files (`.srt` / `.ass`), and automatically launches [mpv](https://mpv.io) with the subtitles loaded for seamless playback.
+**Autosub Player** is an intelligent, high-performance video subtitle generator and player. It transcribes audio tracks locally using [faster-whisper](https://github.com/SYSTRAN/faster-whisper), optionally translates subtitles using a resilient multi-provider AI translation fallback chain (**DeepL**, **Google Gemini**, and **Groq**), auto-muxes subtitles into the video via **ffmpeg**, and launches [mpv](https://mpv.io) for seamless playback.
 
 ---
 
 ## 🌟 Key Features
 
-- 🎙️ **High-Performance Local Speech Recognition**: Powered by `faster-whisper` and CTranslate2 with Voice Activity Detection (VAD) and automatic language detection.
-- ⚡ **Hardware Acceleration**: Automatic GPU (`CUDA` / float16) acceleration with seamless fallback to CPU (`int8`).
+- 🎙️ **Multi-Engine Transcription**: Powered by a unified backend supporting `faster-whisper`, `Qwen3-ASR`.
+  - **Auto-Selection**: Automatically uses `Canary-Qwen` for English, and `Qwen3-ASR` with Forced Alignment for everything else.
+  - Features Voice Activity Detection (VAD) and automatic language detection.
+- ⚡ **Hardware Acceleration**: Automatic GPU (`CUDA` / float16 / bfloat16) acceleration with seamless fallback to CPU (`int8`) for Whisper.
 - 🌐 **Multi-Provider AI Translation Chain**:
   - Resilient translation fallback across **DeepL**, **Google Gemini (Gemini 2.5 Flash)**, and **Groq (Llama 3.3 70B)**.
+  - Customizable provider order via `--provider-order`.
   - Automatic quota/rate-limit switching and retry mechanisms.
-  - Subtitle styling tag preservation for `.ass` / `.srt` formats.
-- 🌍 **RTL & Arabic Subtitle Support**: Built-in bidirectional unicode formatting (`\u202B...\u202C`) to ensure proper display of right-to-left languages like Arabic.
-- 🎨 **Modern Dark-Themed GUI & CLI**: Includes a sleek desktop file picker for easy point-and-click usage as well as a comprehensive command-line interface.
-- 📺 **Instant Playback**: Pre-loads generated subtitles directly into the lightweight `mpv` video player.
-- 🚀 **One-Click Windows Launcher**: Comes with `Start.bat` to automatically set up the virtual environment, install requirements, and run the app.
+  - Proper SDK-specific exception handling (no string-sniffing).
+  - Subtitle styling tag preservation (ASS/SSA tags stay in their original positions).
+- 🌍 **RTL & Arabic Subtitle Support**: Built-in bidirectional unicode formatting for right-to-left languages.
+- 🎥 **Automatic Subtitle Muxing**: Embeds subtitles directly into the video via ffmpeg (stream copy, no re-encode).
+- 🔥 **Optional Burn-In**: Hardcode subtitles into the video frames with `--burn-in` for maximum compatibility.
+- 🎨 **Modern Dark-Themed GUI & CLI**: Sleek desktop file picker + comprehensive command-line interface.
+- 📺 **Instant Playback**: Auto-launches mpv after processing.
+- 💾 **Smart Caching**: Transcription results are cached centrally (`~/.autosub_cache/`) — re-running translation on the same video skips re-transcription.
+- 📄 **`.env` File Support**: Load API keys from a `.env` file via `python-dotenv`.
+- 🚀 **One-Click Windows Launcher**: `Start.bat` handles venv setup and launch.
 
 ---
 
@@ -30,19 +38,28 @@
 ```mermaid
 flowchart TD
     A[Input Video] --> B{GUI File Picker or CLI}
-    B --> C[Audio Extraction & VAD]
-    C --> D[faster-whisper Transcription]
-    D --> E{Translation Requested?}
-    E -- No --> H[Generate Subtitle File .srt / .ass]
-    E -- Yes --> F[Translation Provider Chain]
-    F -->|Try 1| DeepL[DeepL API]
-    F -->|Fallback 2| Gemini[Google Gemini API]
-    F -->|Fallback 3| Groq[Groq API]
-    DeepL --> G[RTL Formatting / Tag Restore]
-    Gemini --> G
-    Groq --> G
-    G --> H
-    H --> I[Auto-launch mpv Player with Subtitles]
+    B --> C[Check Cache]
+    C -->|Hit| E[Load Cached Segments]
+    C -->|Miss| D[Audio Extraction & VAD → faster-whisper]
+    D --> E2[Save to Cache]
+    E2 --> F{Translation Requested?}
+    E --> F
+    F -- No --> I[Generate Subtitle File .srt / .ass]
+    F -- Yes --> G[Translation Provider Chain]
+    G -->|Try 1| DeepL[DeepL API]
+    G -->|Fallback 2| Gemini[Google Gemini API]
+    G -->|Fallback 3| Groq[Groq API]
+    DeepL --> H[Tag Restore + RTL Fix + __FAILED__ Fallback]
+    Gemini --> H
+    Groq --> H
+    H --> I
+    I --> J{Mux Mode?}
+    J -->|--no-mux| K[Play with --sub-file]
+    J -->|Default| L[ffmpeg Soft Mux → .subbed.mp4]
+    J -->|--burn-in| M[ffmpeg Burn-in → .burned.mp4]
+    L --> N[Auto-launch mpv]
+    M --> N
+    K --> N
 ```
 
 ---
@@ -53,12 +70,12 @@ flowchart TD
 - **Python 3.10+** installed and added to your system `PATH`.
 
 ### 2. External Tools
-- **[FFmpeg](https://ffmpeg.org/)**: Required by `faster-whisper` / `ctranslate2` for audio extraction and decoding. Must be on your system `PATH`.
-- **[mpv](https://mpv.io/)**: Required for automatic video playback with subtitles pre-loaded. Must be on your system `PATH`.
-- *(Linux only)* **Tkinter**: If running on Linux, install `python3-tk` (e.g., `sudo apt-get install python3-tk`).
+- **[FFmpeg](https://ffmpeg.org/)**: Required for audio extraction, subtitle muxing, and burn-in. Must be on your system `PATH`.
+- **[mpv](https://mpv.io/)**: Required for automatic video playback. Must be on your system `PATH`.
+- *(Linux only)* **Tkinter**: Install `python3-tk` (e.g., `sudo apt-get install python3-tk`).
 
 ### 3. GPU Acceleration (Optional)
-- **NVIDIA GPU** with CUDA Toolkit and cuDNN for faster float16 transcription inference. (The app will automatically fall back to CPU `int8` if no GPU is detected).
+- **NVIDIA GPU** with CUDA Toolkit and cuDNN for faster float16 transcription inference. Falls back to CPU `int8` automatically.
 
 ---
 
@@ -105,7 +122,31 @@ This script will automatically:
 
 ## 🔑 Translation API Keys Setup (Optional)
 
-To enable AI translation across multiple providers, set one or more of the following environment variables:
+Set one or more API keys via **environment variables** or a **`.env` file** in the project directory:
+
+### Using a `.env` file (recommended):
+Create a `.env` file in the project root:
+```env
+DEEPL_API_KEY=your_deepl_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### Using environment variables:
+- **Windows (PowerShell):**
+  ```powershell
+  $env:GEMINI_API_KEY="your_gemini_api_key_here"
+  $env:GROQ_API_KEY="your_groq_api_key_here"
+  $env:DEEPL_API_KEY="your_deepl_api_key_here"
+  ```
+- **Linux / macOS:**
+  ```bash
+  export GEMINI_API_KEY="your_gemini_api_key_here"
+  export GROQ_API_KEY="your_groq_api_key_here"
+  export DEEPL_API_KEY="your_deepl_api_key_here"
+  ```
+
+### Provider Reference
 
 | Provider | Environment Variable | Model / Service |
 | :--- | :--- | :--- |
@@ -113,72 +154,63 @@ To enable AI translation across multiple providers, set one or more of the follo
 | **Google Gemini** | `GEMINI_API_KEY` | `gemini-2.5-flash` |
 | **Groq** | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
 
-### Setting Environment Variables:
-
-- **Windows (Command Prompt):**
-  ```cmd
-  set GEMINI_API_KEY=your_gemini_api_key_here
-  set GROQ_API_KEY=your_groq_api_key_here
-  set DEEPL_API_KEY=your_deepl_api_key_here
-  ```
-- **Windows (PowerShell):**
-  ```powershell
-  $env:GEMINI_API_KEY="your_gemini_api_key_here"
-  $env:GROQ_API_KEY="your_groq_api_key_here"
-  $env:DEEPL_API_KEY="your_deepl_api_key_here"
-  ```
-- **Linux / macOS (Bash/Zsh):**
-  ```bash
-  export GEMINI_API_KEY="your_gemini_api_key_here"
-  export GROQ_API_KEY="your_groq_api_key_here"
-  export DEEPL_API_KEY="your_deepl_api_key_here"
-  ```
-
-> *Note: If no translation API keys are configured, transcription will run normally without translation.*
+> *If no API keys are configured, transcription runs normally without translation.*
 
 ---
 
 ## 💻 Usage
 
 ### 1. GUI Mode
-Run the script without arguments to open the dark-mode configuration window:
+Run without arguments to open the configuration window:
 ```bash
 python autosub_player.py
 ```
-1. Select the **Source Language** (or leave as `Auto-detect`).
-2. Select the **Translation Target Language** (optional).
-3. Click **Browse for Video…** to choose your video file.
-4. The transcription and translation will run automatically, saving the subtitle file next to the video and opening `mpv`.
 
 ---
 
 ### 2. Command Line Interface (CLI)
 
 ```bash
-# Basic transcription and playback
+# Basic: transcribe, mux subtitles into video, and play
 python autosub_player.py --video "movie.mkv"
 
-# Specify Whisper model and source language
-python autosub_player.py --video "lecture.mp4" --model medium --lang en
-
-# Transcribe and translate to Arabic with ASS subtitles
+# Translate to Arabic with ASS subtitles
 python autosub_player.py --video "clip.mp4" --target-lang ar --format ass
 
-# Transcribe only (skip auto-playback) and specify custom output path
-python autosub_player.py --video "talk.webm" --output "output/talk.srt" --no-play
+# Burn subtitles into video (permanent, re-encodes)
+python autosub_player.py --video "clip.mp4" --target-lang es --burn-in
+
+# Custom provider order: try Gemini first, then Groq
+python autosub_player.py --video "talk.mp4" --target-lang fr --provider-order gemini,groq
+
+# Legacy mode: subtitle file only, no muxing
+python autosub_player.py --video "talk.webm" --no-mux --no-play
+
+# Force re-transcription (skip cache)
+python autosub_player.py --video "movie.mkv" --no-cache
+
+# Keep the subtitle file after muxing
+python autosub_player.py --video "movie.mkv" --target-lang de --keep-subs
 ```
 
 ### CLI Arguments Reference
 
 | Argument | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--video` | `str` | `None` | Path to video file. If omitted, opens the GUI file picker dialog. |
-| `--model` | `str` | `small` | Whisper model size (`tiny`, `base`, `small`, `medium`, `large-v3`). |
-| `--lang` | `str` | `None` | Source language ISO code (e.g., `en`, `ar`, `es`). Defaults to auto-detect. |
-| `--target-lang` | `str` | `none` | Target language ISO code for translation (e.g., `ar`, `en`, `es`, `fr`, `de`, `zh-CN`). |
+| `--video` | `str` | `None` | Path to video file. Opens GUI if omitted. |
+| `--engine` | `str` | `None` | Transcription engine: `whisper`, `canary-qwen`, `qwen3-asr`. Defaults to auto-select. |
+| `--model` | `str` | `small` | Whisper model size (`tiny`, `base`, `small`, `medium`, `large-v3`). Only applies to Whisper engine. |
+| `--small-model` | flag | `False` | Use the smaller Qwen3-ASR variant (`0.6B` instead of `1.7B`). |
+| `--lang` | `str` | `None` | Source language ISO code. Defaults to auto-detect. |
+| `--target-lang` | `str` | `none` | Target language for translation. |
 | `--format` | `str` | `srt` | Subtitle format: `srt` or `ass`. |
-| `--output` | `str` | `None` | Explicit path where the subtitle file should be saved. |
-| `--no-play` | `flag` | `False` | Skip launching `mpv` player after transcription. |
+| `--output` | `str` | `None` | Explicit subtitle output path. |
+| `--no-play` | flag | `False` | Skip launching mpv. |
+| `--burn-in` | flag | `False` | Burn subtitles into video (re-encodes, slow). |
+| `--keep-subs` | flag | `False` | Keep standalone subtitle file after muxing. |
+| `--no-mux` | flag | `False` | Skip ffmpeg muxing (subtitle file only). |
+| `--provider-order` | `str` | `None` | Comma-separated provider order (e.g. `gemini,deepl,groq`). |
+| `--no-cache` | flag | `False` | Bypass transcription cache. |
 
 ---
 
@@ -186,16 +218,34 @@ python autosub_player.py --video "talk.webm" --output "output/talk.srt" --no-pla
 
 - **Video Containers**: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`
 - **Subtitle Output**: `.srt` (SubRip), `.ass` (Advanced SubStation Alpha)
-- **Languages**: Arabic (`ar`), English (`en`), Spanish (`es`), French (`fr`), German (`de`), Italian (`it`), Portuguese (`pt`), Russian (`ru`), Japanese (`ja`), Korean (`ko`), Chinese Simplified (`zh-CN`), and all languages supported by Whisper.
+- **Languages**: Arabic, English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese Simplified, and all languages supported by Whisper.
+
+### Container Muxing Notes
+
+| Container | Soft Subtitle Codec | Notes |
+| :--- | :--- | :--- |
+| `.mkv` | `srt` / `ass` natively | ✅ Full ASS styling support |
+| `.mp4` | `mov_text` | ⚠️ ASS styling lost; plain text only |
+| `.mov` | `mov_text` | ⚠️ Same as MP4 |
+| `.webm` | `webvtt` | ⚠️ Converted from SRT; ASS styling lost |
+| `.avi` | N/A | ❌ Muxing skipped; subtitle file saved separately |
+
+---
+
+## 🧪 Running Tests
+
+```bash
+python -m pytest tests/ -v
+```
 
 ---
 
 ## 🤝 Community & Acknowledgments
 
-- Special acknowledgment and appreciation to the [**SDAIA Academy**](https://github.com/SDAIAAcademy) community for supporting AI education and innovation.
+- Special acknowledgment to the [**SDAIA Academy**](https://github.com/SDAIAAcademy) community for supporting AI education and innovation.
 - Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and [CTranslate2](https://github.com/OpenNMT/CTranslate2).
-- Subtitle processing handled by [pysubs2](https://github.com/tkarabela/pysubs2).
-- Video playback powered by [mpv](https://mpv.io).
+- Subtitle processing by [pysubs2](https://github.com/tkarabela/pysubs2).
+- Video playback by [mpv](https://mpv.io).
 
 ---
 
